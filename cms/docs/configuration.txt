@@ -37,19 +37,20 @@ CMS_PLACEHOLDER_CONF
 ----------------------
 
 Is used to configure the placeholders. 
-This is optional
+This is optional.
 
 Example::
 
 	CMS_PLACEHOLDER_CONF = {
 		'content': {
 			'plugins': ('TextPlugin', 'PicturePlugin'),
-			'extra_context': {"theme":"wide"},
+			'text_only_plugins': ('LinkPlugin',)
+			'extra_context': {"width":640},
 			'name':gettext("Content")
 		},
 		'right-column': {
 			"plugins": ('TeaserPlugin', 'LinkPlugin'),
-			"extra_context": {"theme":"small"},
+			"extra_context": {"width":280},
 			'name':gettext("Right Column")
 			'limits': {
 				'global': 2,
@@ -67,6 +68,10 @@ You can combine template names and placeholder names to granually define the plu
 **plugins**
 
 A list of plugins that can be added to this placeholder. If not supplied all plugins can be selected.
+
+**text_only_plugins**
+
+A list of additional plugins that should only be available to the TextPlugin, but can't be added directly to this placeholder.
 
 **extra_context**
 
@@ -249,7 +254,11 @@ For example you have a page named blog and a blog application. You can attach th
 
 At the moment if you change this settings you should restart the server as there is a cache invalidation bug.
 
-An simpler way is to have a page with the same url as the app. This will give you also the plugin and menu abilities but has some limitations when it comes to i18n and urls. 
+An simpler way is to have a page with the same url as the app. This will give you also the plugin and menu abilities but has some limitations when it comes to i18n and urls.
+
+**ATTENTION**
+
+All views must return RequestContext beside the normal Context 
 
 CMS_UNIQUE_SLUGS
 ------------------
@@ -361,3 +370,18 @@ Example::
 	CMS_PAGE_MEDIA_PATH = 'cms_page_media/'
 
 
+CMS_DBGETTEXT
+-------------
+
+Enable gettext-based translation of CMS content rather than using the standard administration interface. Requires `django-dbgettext <http://http://bitbucket.org/drmeers/django-dbgettext>`_.
+
+Default: ``False`` (unless ``dbgettext`` is in ``settings.INSTALLED_APPS``)
+
+CMS_DBGETTEXT_SLUGS
+-------------------
+
+Enable gettext-based translation of page paths/slugs. Experimental at this stage as resulting translations cannot be guaranteed to be unique.
+
+Default: ``False``
+
+For general dbgettext settings, see the `dbgettext documentation <http://bitbucket.org/drmeers/django-dbgettext/src/tip/docs>`_.

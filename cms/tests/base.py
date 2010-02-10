@@ -8,6 +8,8 @@ from cms.models import Title, Page
 URL_CMS_PAGE = "/admin/cms/page/"
 URL_CMS_PAGE_ADD = URL_CMS_PAGE + "add/"
 URL_CMS_PAGE_CHANGE = URL_CMS_PAGE + "%d/" 
+URL_CMS_PLUGIN_ADD = URL_CMS_PAGE + "add-plugin/"
+URL_CMS_PLUGIN_EDIT = URL_CMS_PAGE + "edit-plugin/"
 
 class CMSTestCase(TestCase):
     counter = 1
@@ -34,7 +36,7 @@ class CMSTestCase(TestCase):
     
     def get_new_page_data(self, parent_id=''):
         page_data = {'title':'test page %d' % self.counter, 
-            'slug':'test-page-%d' % self.counter, 'language':'en',
+            'slug':'test-page-%d' % self.counter, 'language':settings.LANGUAGES[0][0],
             'site':1, 'template':'index.html', 'parent': parent_id}
         
         # required only if user haves can_change_permission

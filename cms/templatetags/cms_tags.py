@@ -5,9 +5,7 @@ from django.core.mail import send_mail, mail_managers
 from django.contrib.sites.models import Site
 from django.utils.safestring import mark_safe
 from django.utils.translation import ugettext_lazy as _
-from django.conf import settings as django_settings
 from cms.exceptions import NoHomeFound
-
 from cms.models import Page
 from cms.utils.moderator import get_cmsplugin_queryset, get_page_queryset, get_title_queryset
 from cms.utils.plugin import render_plugins_for_context
@@ -16,9 +14,11 @@ from cms.utils import get_language_from_request,\
     cut_levels, find_selected, mark_descendants
 from cms.utils import navigation
 from cms.utils.i18n import get_fallback_languages
-from django.template.loader import render_to_string
-from cms.plugin_pool import plugin_pool
 from django.template.defaultfilters import title
+from django.template import TemplateSyntaxError, Node
+from django.utils.translation import get_language
+from django.utils.encoding import smart_str
+
 
 
 register = template.Library()
@@ -153,7 +153,7 @@ def show_menu(context, from_level=0, to_level=100, extra_inactive=0, extra_activ
                 children.append(page)
                 if page.pk == soft_root_pk:
                     page.soft_root = False #ugly hack for the recursive function
-                if current_page and not current_page.navigation_extenders:
+                if current_page:
                     pk = current_page.pk
                 else:
                     pk = -1
@@ -204,7 +204,7 @@ def show_menu(context, from_level=0, to_level=100, extra_inactive=0, extra_activ
 show_menu = register.inclusion_tag('cms/dummy.html', takes_context=True)(show_menu)
 
 
-def show_menu_below_id(context, root_id=None, from_level=0, to_level=100, extra_inactive=0, extra_active=100, template_file="cms/menu.html", next_page=None):
+def show_menu_below_id(context, root_id=None, from_level=0, to_level=100, extra_inactive=100, extra_active=100, template_file="cms/menu.html", next_page=None):
     return show_menu(context, from_level, to_level, extra_inactive, extra_active, template_file, next_page, root_id=root_id)
 register.inclusion_tag('cms/dummy.html', takes_context=True)(show_menu_below_id)
 
@@ -490,7 +490,7 @@ def do_placeholder(parser, token):
         #tag_name, name
         return PlaceholderNode(bits[1])
     elif len(bits) == 3:
-        #tag_name, name, theme
+        #tag_name, name, width
         return PlaceholderNode(bits[1], bits[2])
     else:
         raise template.TemplateSyntaxError(error_string)
@@ -499,17 +499,27 @@ class PlaceholderNode(template.Node):
     """This template node is used to output page content and
     is also used in the admin to dynamicaly generate input fields.
     
-    eg: {% placeholder content-type-name page-object widget-name %}
+    eg: {% placeholder content-type-name width %}
     
     Keyword arguments:
     name -- the name of the placeholder
-    theme -- additional theme attribute string which gets added to the context
+    width -- additional width attribute (integer) which gets added to the plugin context
     """
-    def __init__(self, name, theme=None):
+    def __init__(self, name, width=None):
         self.name = "".join(name.lower().split('"'))
-        self.theme = theme
+        if width: self.width = template.Variable(width)
 
     def render(self, context):
+        width_var = getattr(self, 'width', None)
+        if width_var:
+            try:
+                width = width_var.resolve(context)
+            except template.VariableDoesNotExist:
+                # should we raise an error here?
+                width = None
+        else:
+            width = None
+            
         if context.get('display_placeholder_names_only'):
             return "<!-- PlaceholderNode: %s -->" % self.name
             
@@ -520,7 +530,7 @@ class PlaceholderNode(template.Node):
         page = request.current_page
         if page == "dummy":
             return ""
-        return render_plugins_for_context(self.name, page, context, self.theme)
+        return render_plugins_for_context(self.name, page, context, width)
  
     def __repr__(self):
         return "<Placeholder Node: %s>" % self.name
@@ -534,39 +544,67 @@ def do_page_attribute(parser, token):
         bits = token.split_contents()
     except ValueError:
         raise template.TemplateSyntaxError(error_string)
-    if len(bits) == 2:
-        #tag_name, name
-        return PageAttributeNode(bits[1])
+    if len(bits) >= 2:
+        # tag_name, name
+        # tag_name, name, reverse_id
+        reverse_id = len(bits) == 3 and bits[2] or None
+        return PageAttributeNode(bits[1], reverse_id)
     else:
         raise template.TemplateSyntaxError(error_string)
 
 class PageAttributeNode(template.Node):
-    """This template node is used to output attribute from page such
-    as its title and slug.
+    """This template node is used to output attribute from a page such
+    as its title or slug.
 
-    eg: {% page_attribute field-name %}
+    Synopsis
+         {% page_attribute field-name %}        
+         {% page_attribute field-name reverse-id %}
+     
+    Example
+         {# Output current page's page_title attribute #}
+         {% page_attribute page_title %}        
+         {# Output page_title attribute of the page with reverse_id 'the_page' #}
+         {% page_attribute page_title 'the_page' %}
+
 
     Keyword arguments:
-    field-name -- the name of the field to output. One of "title",
-    "slug", "meta_description" or "meta_keywords" -- Use without qoutes!
+    field-name -- the name of the field to output. Use one of:
+    - title
+    - menu_title
+    - page_title
+    - slug
+    - meta_description
+    - meta_keywords
+    
+    reverse-id -- The page's reverse_id property, if omitted field-name of 
+    current page is returned.
     """
-    def __init__(self, name):
+    def __init__(self, name, reverse_id=None):
         self.name = name.lower()
+        self.reverse_id = reverse_id
+
 
     def render(self, context):
         if not 'request' in context:
             return ''
         lang = get_language_from_request(context['request'])
-        request = context['request']
-        page = request.current_page
+        page = self._get_page(context['request'])
         if page == "dummy":
             return ''
         if page and self.name in ["title", "slug", "meta_description", "meta_keywords", "page_title", "menu_title"]:
             f = getattr(page, "get_"+self.name)
             return f(language=lang, fallback=True)
-        else:
-            return ''
-        
+        return ''
+
+    def _get_page(self, request):
+        if self.reverse_id == None:
+            return request.current_page
+        site = Site.objects.get_current()    
+        try:
+            return get_page_queryset(request).get(reverse_id=self.reverse_id, site=site)
+        except:
+            send_missing_mail(self.reverse_id, request)
+
     def __repr__(self):
         return "<PageAttribute Node: %s>" % self.name
 

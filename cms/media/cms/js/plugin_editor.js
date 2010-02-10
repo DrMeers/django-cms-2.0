@@ -1,6 +1,6 @@
 $(document).ready(function() {
     $('span.add-plugin').click(function(){
-        var select = $(this).parent().children("select");
+    	var select = $(this).parent().children("select[name=plugins]");
         var pluginvalue = select.attr('value');
         var placeholder = $(this).parent().parent().parent().children("label").attr("for").split("id_")[1];
         var splits = window.location.href.split("/");
@@ -37,6 +37,41 @@ $(document).ready(function() {
         }
     });
 
+    $('span.copy-plugins').click(function(){
+    	var copy_from_language = $(this).parent().children("select[name=copy-plugins]").attr("value");
+        var placeholder = $(this).parent().parent().parent().children("label").attr("for").split("id_")[1];
+        var splits = window.location.href.split("/");
+        var page_id = splits[splits.length-2];
+
+        var to_language = $('input.language_button.selected').attr('name');
+
+        if (!to_language) {
+        	to_language = $('input[name=language]').attr("value");
+        }
+
+        if (!to_language) {
+            alert("Unable to determine the correct language for this plugin! Please report the bug!");
+        }
+        
+        var target_div = $(this).parent().parent().parent().children('div.plugin-editor');
+        if ((copy_from_language) && (copy_from_language != "")) {
+        	var ul_list = $(this).parent().parent().children("ul.plugin-list");
+            $.ajax({
+            	url: "copy-plugins/", dataType: "html", type: "POST",
+            	data: { page_id: page_id, placeholder: placeholder, copy_from: copy_from_language, language: to_language },
+            	success: function(data) {
+                    ul_list.append(data);
+                    setclickfunctions();
+             	},
+             	error: function(xhr) {
+             		if (xhr.status < 500) {
+             			alert(xhr.responseText);
+             		}
+             	}
+            });
+        }
+    });    
+    
     $('ul.plugin-list').sortable({
         handle:'span.drag',
         //appendTo:'body',

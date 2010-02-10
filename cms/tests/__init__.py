@@ -9,6 +9,21 @@ from cms.utils import urlutils
 from cms.tests.page import PagesTestCase
 from cms.tests.permmod import PermissionModeratorTestCase
 from cms.tests.site import SiteTestCase
+from cms.tests.navextender import NavExtenderTestCase
+from cms.tests.plugins import PluginsTestCase
+from cms.tests.reversion_tests import ReversionTestCase
+
+settings.CMS_PERMISSION = True
+settings.CMS_MODERATOR = True
+settings.CMS_NAVIGATION_EXTENDERS = (
+    ('example.categories.navigation.get_nodes', 'Categories'),
+    ('example.sampleapp.menu_extender.get_nodes', 'SampleApp Menu'),
+)
+
+settings.CMS_FLAT_URLS = False
+settings.CMS_MENU_TITLE_OVERWRITE = True
+settings.CMS_HIDE_UNTRANSLATED = False
+settings.CMS_URL_OVERWRITE = True
 
 def suite():
     # this must be changed!! and tests must happen for multiple configurations!
@@ -17,11 +32,12 @@ def suite():
     s.addTest(unittest.defaultTestLoader.loadTestsFromTestCase(PagesTestCase))
     
     s.addTest(unittest.defaultTestLoader.loadTestsFromTestCase(SiteTestCase))
-    
-    if settings.CMS_PERMISSION and settings.CMS_MODERATOR:
-        # this test is settings dependant, and these settings can not be
-        # changed on the fly.
-        s.addTest(unittest.defaultTestLoader.loadTestsFromTestCase(PermissionModeratorTestCase))
+    s.addTest(unittest.defaultTestLoader.loadTestsFromTestCase(NavExtenderTestCase))
+    if "cms.plugins.text" in settings.INSTALLED_APPS:
+        s.addTest(unittest.defaultTestLoader.loadTestsFromTestCase(PluginsTestCase))
+        if "reversion" in settings.INSTALLED_APPS:
+            s.addTest(unittest.defaultTestLoader.loadTestsFromTestCase(ReversionTestCase))
+    s.addTest(unittest.defaultTestLoader.loadTestsFromTestCase(PermissionModeratorTestCase))
     return s
  
 def test_runner_with_coverage(test_labels, verbosity=1, interactive=True, extra_tests=[]):

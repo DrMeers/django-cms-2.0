@@ -151,3 +151,65 @@ For installation be sure you have the following in your project's ``INSTALLED_AP
 		'cms.plugins.text',
 		# ...
 	)
+	
+Video
+-----
+
+Plays Video Files or Youtube / Vimeo Videos. Uses the `OSFlashVideoPlayer <http://github.com/FlashJunior/OSFlashVideoPlayer>`_.
+If you upload a file use .flv files or h264 encoded video files. 
+ 
+For installation be sure you have the following in your project's ``INSTALLED_APPS`` setting::
+
+	INSTALLED_APPS = (
+		# ...
+		'cms.plugins.video',
+		# ...
+	)
+	
+There are some settings you can set in your settings.py to overwrite some default behavior:
+
+- VIDEO_AUTOPLAY default=False
+- VIDEO_AUTOHIDE default=False
+- VIDEO_FULLSCREEN default=True
+- VIDEO_LOOP default=False
+- VIDEO_AUTOPLAY default=False
+- VIDEO_AUTOPLAY default=False
+
+- VIDEO_BG_COLOR default="000000"
+- VIDEO_TEXT_COLOR default="FFFFFF"
+- VIDEO_SEEKBAR_COLOR default="13ABEC"
+- VIDEO_SEEKBARBG_COLOR default="333333"
+- VIDEO_LOADINGBAR_COLOR default="828282"
+- VIDEO_BUTTON_OUT_COLOR default="333333"
+- VIDEO_BUTTON_OVER_COLOR default="000000"
+- VIDEO_BUTTON_HIGHLIGHT_COLOR default="FFFFFF"
+	
+
+Twitter
+-------
+
+Displays the last number of post of a twitter user.
+
+For installation be sure you have the following in your project's ``INSTALLED_APPS`` setting::
+
+	INSTALLED_APPS = (
+		# ...
+		'cms.plugins.twitter',
+		# ...
+	)
+	
+Inherit
+-------
+
+Displays all plugins of an other page or an other language. Great if you need always the same 
+plugins on a lot of pages.
+
+For installation be sure you have the following in your project's ``INSTALLED_APPS`` setting::
+
+	INSTALLED_APPS = (
+		# ...
+		'cms.plugins.inherit',
+		# ...
+	)
+
+ 
