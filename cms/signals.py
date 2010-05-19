@@ -1,11 +1,9 @@
 from django.db.models import signals
 from django.conf import settings
-from cms import appresolver
-from cms.models import Page, Title
-from cms.models import CMSPlugin        
-from cms.utils.moderator import page_changed
+from cms.models import Page, Title, CMSPlugin, Placeholder
 from django.core.exceptions import ObjectDoesNotExist
 from django.dispatch import Signal
+from menus.menu_pool import menu_pool
 
 # fired after page location is changed - is moved from one node to other
 page_moved = Signal(providing_args=["instance"])
@@ -19,7 +17,7 @@ post_publish = Signal(providing_args=["instance"])
         
 def update_plugin_positions(**kwargs):
     plugin = kwargs['instance']
-    plugins = CMSPlugin.objects.filter(page=plugin.page, language=plugin.language, placeholder=plugin.placeholder).order_by("position")
+    plugins = CMSPlugin.objects.filter(language=plugin.language, placeholder=plugin.placeholder).order_by("position")
     last = 0
     for p in plugins:
         if p.position != last:
@@ -42,6 +40,9 @@ page_moved.connect(update_title_paths, sender=Page, dispatch_uid="cms.title.upda
 def pre_save_title(instance, raw, **kwargs):
     """Save old state to instance and setup path
     """
+    
+    menu_pool.clear(instance.page.site_id)
+    
     instance.tmp_path = None
     instance.tmp_application_urls = None
     
@@ -104,17 +105,7 @@ def post_save_title(instance, raw, created, **kwargs):
     except AttributeError:
         pass
 
-signals.post_save.connect(post_save_title, sender=Title, dispatch_uid="cms.title.postsave")
-
-
-def clear_appresolver_cache(instance, **kwargs):
-    # reset cached applications - there were a change probably
-    appresolver.dynamic_app_regex_url_resolver.reset_cache()
-
-
-if settings.CMS_APPLICATIONS_URLS:
-    # register this signal only if we have some hookable applications
-    application_post_changed.connect(clear_appresolver_cache, sender=Title, dispatch_uid="cms.title.appchanged")        
+signals.post_save.connect(post_save_title, sender=Title, dispatch_uid="cms.title.postsave")        
 
 
 def post_save_user(instance, raw, created, **kwargs):
@@ -193,7 +184,7 @@ def pre_save_page(instance, raw, **kwargs):
         instance.old_page = Page.objects.get(pk=instance.pk)
     except ObjectDoesNotExist:
         pass
-        
+    
 
 def post_save_page(instance, raw, created, **kwargs):   
     """Helper post save signal, cleans old_page attribute.
@@ -203,14 +194,32 @@ def post_save_page(instance, raw, created, **kwargs):
     
     if settings.CMS_MODERATOR:
         # tell moderator something was happen with this page
+        from cms.utils.moderator import page_changed
         page_changed(instance, old_page)
     
+def update_placeholders(instance, **kwargs):
+    from cms.utils.plugins import get_placeholders
+    placeholders = get_placeholders(instance.get_template())
+    found = {}
+    for placeholder in instance.placeholders.all():
+        if placeholder.slot in placeholders:
+            found[placeholder.slot] = placeholder
+    for placeholder_name in placeholders:
+        if not placeholder_name in found:
+            placeholder = Placeholder.objects.create(slot=placeholder_name)
+            instance.placeholders.add(placeholder)
+            found[placeholder_name] = placeholder
+
+def invalidate_menu_cache(instance, **kwargs):
+    menu_pool.clear(instance.site_id)    
 
 if settings.CMS_MODERATOR:
     # tell moderator, there is something happening with this page
     signals.pre_save.connect(pre_save_page, sender=Page, dispatch_uid="cms.page.presave")
     signals.post_save.connect(post_save_page, sender=Page, dispatch_uid="cms.page.postsave")
-    
+signals.post_save.connect(update_placeholders, sender=Page)
+signals.pre_save.connect(invalidate_menu_cache, sender=Page)
+signals.pre_delete.connect(invalidate_menu_cache, sender=Page)
  
 from cms.models import PagePermission, GlobalPagePermission
 from cms.cache.permissions import clear_user_permission_cache,\

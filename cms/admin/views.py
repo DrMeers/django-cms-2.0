@@ -14,11 +14,11 @@ from cms.utils.admin import render_admin_menu_item
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from cms.utils import get_language_from_request
 
-def save_all_plugins(request, page, excludes=None):
+def save_all_plugins(request, page, placeholder, excludes=None):
     if not page.has_change_permission(request):
         raise Http404
     
-    for plugin in CMSPlugin.objects.filter(page=page):
+    for plugin in CMSPlugin.objects.filter(placeholder=placeholder):
         if excludes:
             if plugin.pk in excludes:
                 continue
@@ -55,7 +55,7 @@ def revert_plugins(request, version_id, obj):
             others.append(rev)
     if not page.has_change_permission(request):
         raise Http404
-    current_plugins = list(CMSPlugin.objects.filter(page=page))
+    current_plugins = list(CMSPlugin.objects.filter(placeholder__page=page))
     for plugin in cms_plugin_list:
         plugin.page = page
         plugin.save(no_signals=True)

@@ -8,11 +8,12 @@ from django.core.urlresolvers import reverse
 from django.contrib.sites.models import Site
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils.functional import lazy
 from publisher import MpttPublisher
 from publisher.errors import PublisherCantPublish
 from cms.utils.urlutils import urljoin
 from cms.models.managers import PageManager, PagePermissionsPermissionManager
-
+from cms.models.placeholdermodel import Placeholder
 from cms.utils.page import get_available_slug, check_title_slugs
 from cms.exceptions import NoHomeFound
 from cms.utils.helpers import reversion_register
@@ -36,8 +37,11 @@ class Page(MpttPublisher):
         (MODERATOR_APPROVED, _('approved')),
         (MODERATOR_APPROVED_WAITING_FOR_PARENTS, _('app. par.')),
     )
-    created_by = models.CharField(_("created by"), max_length=70)
-    changed_by = models.CharField(_("changed by"), max_length=70)
+    
+    template_choices = [(x, _(y)) for x,y in settings.CMS_TEMPLATES]
+    
+    created_by = models.CharField(_("created by"), max_length=70, editable=False)
+    changed_by = models.CharField(_("changed by"), max_length=70, editable=False)
     parent = models.ForeignKey('self', null=True, blank=True, related_name='children', db_index=True)
     creation_date = models.DateTimeField(editable=False, default=datetime.now)
     publication_date = models.DateTimeField(_("publication date"), null=True, blank=True, help_text=_('When the page should go live. Status must be "Published" for page to go live.'), db_index=True)
@@ -45,10 +49,10 @@ class Page(MpttPublisher):
     in_navigation = models.BooleanField(_("in navigation"), default=True, db_index=True)
     soft_root = models.BooleanField(_("soft root"), db_index=True, default=False, help_text=_("All ancestors will not be displayed in the navigation"))
     reverse_id = models.CharField(_("id"), max_length=40, db_index=True, blank=True, null=True, help_text=_("An unique identifier that is used with the page_url templatetag for linking to this page"))
-    navigation_extenders = models.CharField(_("navigation extenders"), max_length=80, db_index=True, blank=True, null=True, choices=settings.CMS_NAVIGATION_EXTENDERS)
+    navigation_extenders = models.CharField(_("attached menu"), max_length=80, db_index=True, blank=True, null=True)
     published = models.BooleanField(_("is published"), blank=True)
     
-    template = models.CharField(_("template"), max_length=100, choices=settings.CMS_TEMPLATES, help_text=_('The template used to render the content.'))
+    template = models.CharField(_("template"), max_length=100, choices=template_choices, help_text=_('The template used to render the content.'))
     site = models.ForeignKey(Site, help_text=_('The site the page is accessible at.'), verbose_name=_("site"))
     
     moderator_state = models.SmallIntegerField(_('moderator state'), choices=moderator_state_choices, default=MODERATOR_NEED_APPROVEMENT, blank=True)
@@ -61,6 +65,9 @@ class Page(MpttPublisher):
     login_required = models.BooleanField(_("login required"),default=False)
     menu_login_required = models.BooleanField(_("menu login required"),default=False, help_text=_("only show this page in the menu if the user is logged in"))
     
+    # Placeholders (plugins)
+    placeholders = models.ManyToManyField(Placeholder, editable=False)
+    
     # Managers
     objects = PageManager()
     permissions = PagePermissionsPermissionManager()
@@ -68,18 +75,17 @@ class Page(MpttPublisher):
     class Meta:
         verbose_name = _('page')
         verbose_name_plural = _('pages')
-        ordering = ('tree_id', 'lft')
+        ordering = ('site','tree_id', 'lft')
         app_label = 'cms'
     
     class PublisherMeta:
-        exclude_fields_append = ['moderator_state']
+        exclude_fields_append = ['moderator_state', 'placeholders']
     
     def __unicode__(self):
         title = self.get_menu_title(fallback=True)
         if title is None:
             title = u""
-        pre_title = settings.CMS_TITLE_CHARACTER * self.level
-        return u'%s%s' % (pre_title, title)
+        return u'%s' % (title,)
     
     def move_page(self, target, position='first-child'):
         """Called from admin interface when page is moved. Should be used on
@@ -108,10 +114,10 @@ class Page(MpttPublisher):
         from cms.utils.moderator import update_moderation_message
         
         descendants = [self] + list(self.get_descendants().order_by('-rght'))
-        site_reverse_ids = [ x[0] for x in Page.objects.filter(site=site, reverse_id__isnull=False).values_list('reverse_id') ]
+        site_reverse_ids = Page.objects.filter(site=site, reverse_id__isnull=False).values_list('reverse_id', flat=True)
         if target:
             target.old_pk = -1
-            if position == "first_child":
+            if position == "first-child":
                 tree = [target]
             elif target.parent_id:
                 tree = [target.parent]
@@ -122,11 +128,13 @@ class Page(MpttPublisher):
         if tree:
             tree[0].old_pk = tree[0].pk
         first = True
+        # loop over all affected pages (self is included in descendants)
         for page in descendants:
-           
             titles = list(page.title_set.all())
-            plugins = list(page.cmsplugin_set.all().order_by('tree_id', '-rght'))
+            # get all current placeholders (->plugins)
+            placeholders = list(page.placeholders.all())
             origin_id = page.id
+            # create a copy of this page by setting pk = None (=new instance)
             page.old_pk = page.pk
             page.pk = None
             page.level = None
@@ -174,53 +182,67 @@ class Page(MpttPublisher):
                     moderator.page = page
                     moderator.save()
             update_moderation_message(page, unicode(_('Page was copied.')))
+            # copy titles of this page
             for title in titles:
-                title.pk = None
+                title.pk = None # setting pk = None creates a new instance
                 title.publisher_public_id = None
                 title.published = False
                 title.page = page
                 title.slug = get_available_slug(title)
                 title.save()
-            ptree = []
-            for p in plugins:
+            # copy the placeholders (and plugins on those placeholders!)
+            for ph in placeholders:
+                plugins = list(ph.cmsplugin_set.all().order_by('tree_id', '-rght'))
                 try:
-                    plugin, cls = p.get_plugin_instance()
-                except KeyError: #plugin type not found anymore
-                    continue
-                p.page = page
-                p.pk = None
-                p.id = None
-                p.tree_id = None
-                p.lft = None
-                p.rght = None
-                p.inherited_public_id = None
-                p.publisher_public_id = None
-                if p.parent:
-                    pdif = p.level - ptree[-1].level
-                    if pdif < 0:
-                        ptree = ptree[:pdif-1]
-                    p.parent = ptree[-1]
-                    if pdif != 0:
-                        ptree.append(p)
-                else:
-                    ptree = [p]
-                p.level = None
-                p.save()
-                if plugin:
-                    plugin.pk = p.pk
-                    plugin.id = p.pk
-                    plugin.page = page
-                    plugin.tree_id = p.tree_id
-                    plugin.lft = p.lft
-                    plugin.rght = p.rght
-                    plugin.level = p.level
-                    plugin.cmsplugin_ptr = p
-                    plugin.publisher_public_id = None
-                    plugin.public_id = None
-                    plugin.plubished = False
-                    plugin.save()
+                    ph = page.placeholders.get(slot=ph.slot)
+                except Placeholder.DoesNotExist:
+                    ph.pk = None # make a new instance
+                    ph.save()
+                    page.placeholders.add(ph)
+                ptree = []
+                for p in plugins:
+                    p.copy_plugin(ph, p.language, ptree)
+                    """
+                    try:
+                        plugin, cls = p.get_plugin_instance()
+                    except KeyError: #plugin type not found anymore
+                        continue
+                    p.placeholder = ph
+                    p.pk = None # make a new instance
+                    p.id = None
+                    p.tree_id = None
+                    p.lft = None
+                    p.rght = None
+                    p.inherited_public_id = None
+                    p.publisher_public_id = None
+                    if p.parent:
+                        pdif = p.level - ptree[-1].level
+                        if pdif < 0:
+                            ptree = ptree[:pdif-1]
+                        p.parent = ptree[-1]
+                        if pdif != 0:
+                            ptree.append(p)
+                    else:
+                        ptree = [p]
+                    p.level = None
+                    p.save()
+                    if plugin:
+                        plugin.pk = p.pk
+                        plugin.id = p.pk
+                        plugin.placeholder = ph
+                        plugin.tree_id = p.tree_id
+                        plugin.lft = p.lft
+                        plugin.rght = p.rght
+                        plugin.level = p.level
+                        plugin.cmsplugin_ptr = p
+                        plugin.publisher_public_id = None
+                        plugin.public_id = None
+                        plugin.published = False
+                        plugin.save()
+                    """
     
-    def save(self, no_signals=False, change_state=True, commit=True, force_with_moderation=False, force_state=None, **kwargs):
+    def save(self, no_signals=False, change_state=True, commit=True,
+             force_with_moderation=False, force_state=None, **kwargs):
         """
         Args:
             
@@ -328,14 +350,18 @@ class Page(MpttPublisher):
             path = self.get_slug(language, fallback)
         else:
             path = self.get_path(language, fallback)
-            home_pk = None
-            try:
-                home_pk = self.home_pk_cache
-            except NoHomeFound:
-                pass
-            ancestors = self.get_cached_ancestors(ascending=True)
-            if self.parent_id and ancestors[-1].pk == home_pk and not self.get_title_obj_attribute("has_url_overwrite", language, fallback) and path:
-                path = "/".join(path.split("/")[1:])
+            if hasattr(self, "home_cut_cache") and self.home_cut_cache:
+                if not self.get_title_obj_attribute("has_url_overwrite", language, fallback) and path:
+                    path = "/".join(path.split("/")[1:])
+            else:    
+                home_pk = None
+                try:
+                    home_pk = self.home_pk_cache
+                except NoHomeFound:
+                    pass
+                ancestors = self.get_cached_ancestors(ascending=True)
+                if self.parent_id and ancestors[-1].pk == home_pk and not self.get_title_obj_attribute("has_url_overwrite", language, fallback) and path:
+                    path = "/".join(path.split("/")[1:])
             
         if settings.CMS_DBGETTEXT and settings.CMS_DBGETTEXT_SLUGS:
             path = '/'.join([ugettext(p) for p in path.split('/')])
@@ -411,7 +437,7 @@ class Page(MpttPublisher):
         """
         page_title = self.get_title_obj_attribute("page_title", language, fallback, version_id, force_reload)
         if not page_title:
-            return self.get_menu_title(language, True, version_id, force_reload)
+            return self.get_title(language, True, version_id, force_reload)
         return page_title
 
     def get_meta_description(self, language=None, fallback=True, version_id=None, force_reload=False):

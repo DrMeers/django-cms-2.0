@@ -51,13 +51,15 @@ class CMSPluginBase(admin.ModelAdmin):
     
     form = None
     change_form_template = "admin/cms/page/plugin_change_form.html"
-    admin_preview = True #Should the plugin be rendered in the admin?
+    admin_preview = True # Should the plugin be rendered in the admin?
     
     render_template = None
+    render_plugin = True # Should the plugin be rendered at all, or doesn't it have any output?
     model = CMSPlugin
     text_enabled = False
     
     opts = {}
+    module = None #track in which module/application belongs
     
     def __init__(self, model=None,  admin_site=None):
         if self.model:
@@ -105,12 +107,17 @@ class CMSPluginBase(admin.ModelAdmin):
         
         self.object_successfully_changed = False
         
-        # variables will be overriden in edit_view, so we got requred
+        # variables will be overwritten in edit_view, so we got required
         self.cms_plugin_instance = None
         self.placeholder = None
+        self.page = None
 
     def render(self, context, instance, placeholder):
         raise NotImplementedError, "render needs to be implemented"
+    
+    @property
+    def parent(self):
+        return self.cms_plugin_instance.parent
     
     def render_change_form(self, request, context, add=False, change=False, form_url='', obj=None):
         """
@@ -125,7 +132,7 @@ class CMSPluginBase(admin.ModelAdmin):
         
         return super(CMSPluginBase, self).render_change_form(request, context, add, change, form_url, obj)
     
-    def get_plugin_media(self, request, plugin):
+    def get_plugin_media(self, request, context, plugin):
         return self.pluginmedia
         
     def has_add_permission(self, request, *args, **kwargs):
@@ -135,7 +142,7 @@ class CMSPluginBase(admin.ModelAdmin):
         Not sure if there will be plugin permission requirement in future, but
         if, then this must be changed.
         """
-        return self.cms_plugin_instance.page.has_change_permission(request)
+        return self.cms_plugin_instance.has_change_permission(request)
     has_delete_permission = has_change_permission = has_add_permission
     
     def save_model(self, request, obj, form, change):

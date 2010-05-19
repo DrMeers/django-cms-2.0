@@ -2,6 +2,19 @@ select[name="plugins"] {
 	width: 150px;
 }
 
+.plugin-holder-nopage{
+    border-bottom: 0px;
+    margin-bottom: 0px;
+}
+
+.plugin-holder-config{
+    border-top: 0px;
+}
+
+.form-row label.plugin-holder-config-label{
+    width: 300px;
+}
+
 .plugin-holder .form-row{
 	padding:0;
 }
@@ -40,6 +53,8 @@ select[name="plugins"] {
 	margin-left:10px;
 	cursor:pointer;
 }
+
+ul.plugin-list{min-height:5px;_height:5px;}
 
 ul.plugin-list li{
 	clear:both;	

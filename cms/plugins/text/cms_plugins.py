@@ -40,10 +40,7 @@ class TextPlugin(CMSPluginBase):
         return TextPluginForm
 
     def get_form(self, request, obj=None, **kwargs):
-        page = None
-        if obj:
-            page = obj.page
-        plugins = plugin_pool.get_text_enabled_plugins(self.placeholder, page)
+        plugins = plugin_pool.get_text_enabled_plugins(self.placeholder, self.page)
         form = self.get_form_class(request, plugins)
         kwargs['form'] = form # override standard form
         return super(TextPlugin, self).get_form(request, obj, **kwargs)
@@ -53,9 +50,9 @@ class TextPlugin(CMSPluginBase):
             from dbgettext.parser import parsed_gettext
             instance.body = parsed_gettext(instance, 'body')
         context.update({
-            'body':plugin_tags_to_user_html(instance.body, context, placeholder), 
-            'placeholder':placeholder,
-            'object':instance
+            'body': plugin_tags_to_user_html(instance.body, context, placeholder), 
+            'placeholder': placeholder,
+            'object': instance
         })
         return context
     

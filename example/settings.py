@@ -13,7 +13,7 @@ CACHE_BACKEND = 'locmem:///'
 
 MANAGERS = ADMINS
 
-DATABASE_ENGINE = 'mysql'#'postgresql_psycopg2'       # 'postgresql_psycopg2', 'postgresql', 'mysql', 'sqlite3' or 'oracle'.
+DATABASE_ENGINE = 'sqlite3'#'postgresql_psycopg2'       # 'postgresql_psycopg2', 'postgresql', 'mysql', 'sqlite3' or 'oracle'.
 DATABASE_NAME = 'cms'           # Or path to database file if using sqlite3.
 DATABASE_USER = 'cms'           # Not used with sqlite3.
 DATABASE_PASSWORD = 'cms'       # Not used with sqlite3.
@@ -40,7 +40,11 @@ SITE_ID = 1
 USE_I18N = True
 
 # Absolute path to the directory that holds media.
-MEDIA_ROOT = os.path.join(PROJECT_DIR, '../cms/media/')
+MEDIA_ROOT = os.path.join(PROJECT_DIR, 'media/')
+
+# Absolute path to the directory that holds media. 
+# DO NOT ACTUALLY USE THIS IN YOUR OWN PROJECT!!!! THIS IS JUST FOR TESTING
+CMS_MEDIA_ROOT = os.path.join(PROJECT_DIR, '../cms/media/cms/')
 #ADMIN_MEDIA_ROOT = os.path.join(PROJECT_DIR, '../admin_media/')
 MEDIA_URL = '/media/'
 
@@ -53,9 +57,9 @@ SECRET_KEY = '*xq7m@)*f2awoj!spa0(jibsrz9%c0d=e(g)v*!17y(vx0ue_3'
 
 # List of callables that know how to import templates from various sources.
 TEMPLATE_LOADERS = (
-    'django.template.loaders.filesystem.load_template_source',
-    'django.template.loaders.app_directories.load_template_source',
-    'django.template.loaders.eggs.load_template_source',
+    'django.template.loaders.filesystem.Loader',
+    'django.template.loaders.app_directories.Loader',
+    'django.template.loaders.eggs.Loader',
 )
 
 TEMPLATE_CONTEXT_PROCESSORS = (
@@ -64,24 +68,26 @@ TEMPLATE_CONTEXT_PROCESSORS = (
     "django.core.context_processors.debug",
     "django.core.context_processors.request",
     "django.core.context_processors.media",
+    'django.core.context_processors.csrf',
     "cms.context_processors.media",
 )
 
 INTERNAL_IPS = ('127.0.0.1',)
 
 MIDDLEWARE_CLASSES = (
+    #'django.middleware.cache.UpdateCacheMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.locale.LocaleMiddleware',
-    'django.middleware.common.CommonMiddleware',
+    'cms.middleware.multilingual.MultilingualURLMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.doc.XViewMiddleware',
-
-    #'django.contrib.csrf.middleware.CsrfMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'cms.middleware.media.PlaceholderMediaMiddleware', 
     'cms.middleware.user.CurrentUserMiddleware',
     'cms.middleware.page.CurrentPageMiddleware',
-    'cms.middleware.multilingual.MultilingualURLMiddleware',
     'cms.middleware.toolbar.ToolbarMiddleware',
     #'debug_toolbar.middleware.DebugToolbarMiddleware',
+    #'django.middleware.cache.FetchFromCacheMiddleware', 
     
 )
 
@@ -105,7 +111,7 @@ INSTALLED_APPS = (
     
     'cms',
     'publisher',
-    
+    'menus',
     'cms.plugins.text',
     'cms.plugins.picture',
     'cms.plugins.file',
@@ -118,14 +124,10 @@ INSTALLED_APPS = (
     'cms.plugins.twitter',
     'cms.plugins.inherit',
     'mptt',
-    'reversion',
-    'example.categories',
+#    'reversion',
+    'example.sampleapp',
     #'debug_toolbar',
     'south',
-    # sample application
-    'example.sampleapp',
-    #'test_utils',
-    #'store',
 )
 
 gettext = lambda s: s
@@ -136,7 +138,7 @@ LANGUAGES = (
     ('fr', gettext('French')),
     ('de', gettext('German')),
     ('en', gettext('English')),
-    ('pt-br', gettext("Brazil")),
+    ('pt-BR', gettext("Brazil")),
 )
 
 CMS_LANGUAGE_CONF = {
@@ -144,45 +146,37 @@ CMS_LANGUAGE_CONF = {
     'en':['fr', 'de'],
 }
 
+CMS_SITE_LANGUAGES = {
+    1:['fr','de','en','pt-BR'],
+    2:['de','en'],
+}
+
 APPEND_SLASH = True
 
 CMS_TEMPLATES = (
-    ('index.html', gettext('default')),
-    ('nice.html', gettext('nice one')),
-    ('cool.html', gettext('cool one')),
-    ('long-folder-long/long-template-name.html', gettext('long')),
+    ('col_two.html', gettext('two columns')),
+    ('col_three.html', gettext('three columns')),
+    ('nav_playground.html', gettext('navigation examples')),
 )
 
-CMS_APPLICATIONS_URLS = (
-    ('sampleapp.urls', 'Sample application'),
-    ('sampleapp.urlstwo', 'Second sample application'),
-)
 
-CMS_PLACEHOLDER_CONF = {                        
-    'right-column': {
-        "plugins": ('FilePlugin', 'FlashPlugin', 'LinkPlugin', 'PicturePlugin', 'TextPlugin', 'SnippetPlugin'),
-        "extra_context": {"width":940},
-        "name":gettext("right column")
-    },
-    
-    'body': {
-        "extra_context": {"width":280},
-        "name":gettext("body"),
-    },
-    'fancy-content': {
-        "plugins": ('TextPlugin', 'LinkPlugin'),
-        "extra_context": {"width":"640"},
-        "name":gettext("fancy content custom name"),
-        "limits": {
-            "global": 3,
-            "TextPlugin": 1,
-        },
+
+CMS_PLACEHOLDER_CONF = {
+    'col_sidebar': {
+        'plugins': ('FilePlugin', 'FlashPlugin', 'LinkPlugin', 'PicturePlugin', 'TextPlugin', 'SnippetPlugin'),
+        'name': gettext("sidebar column")
+    },                    
+                        
+    'col_left': {
+        'plugins': ('FilePlugin', 'FlashPlugin', 'LinkPlugin', 'PicturePlugin', 'TextPlugin', 'SnippetPlugin','GoogleMapPlugin',),
+        'name': gettext("left column")
+    },                  
+                        
+    'col_right': {
+        'plugins': ('FilePlugin', 'FlashPlugin', 'LinkPlugin', 'PicturePlugin', 'TextPlugin', 'SnippetPlugin','GoogleMapPlugin',),
+        'name': gettext("right column")
     },
 }
-
-
-CMS_NAVIGATION_EXTENDERS = (('example.categories.navigation.get_nodes', 'Categories'),
-                            ('example.sampleapp.menu_extender.get_nodes', 'SampleApp Menu'),)
 
 CMS_SOFTROOT = True
 CMS_MODERATOR = True
@@ -194,6 +188,7 @@ CMS_MENU_TITLE_OVERWRITE = True
 CMS_HIDE_UNTRANSLATED = False
 CMS_URL_OVERWRITE = True
 
+SOUTH_TESTS_MIGRATE = False
 
 try:
     from local_settings import *

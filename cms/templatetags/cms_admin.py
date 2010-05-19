@@ -78,7 +78,18 @@ def moderator_choices(page, user):
 @register.filter
 def preview_link(page, language):
     if 'cms.middleware.multilingual.MultilingualURLMiddleware' in settings.MIDDLEWARE_CLASSES:
-        return "/%s%s" % (language, page.get_absolute_url(language, fallback=True))
+        from django.core.urlresolvers import reverse
+
+        # Which one of page.get_slug() and page.get_path() is the right
+        # one to use in this block? They both seem to return the same thing.
+        try:
+            # attempt to retrieve the localized path/slug and return
+            root = reverse('pages-root')
+            return root + language + "/" + page.get_absolute_url(language, fallback=False)[len(root):]
+        except:
+            # no localized path/slug. therefore nothing to preview. stay on the same page.
+            # perhaps the user should be somehow notified for this.
+            return ''
     return page.get_absolute_url(language)
 
 def render_plugin(context, plugin):
@@ -109,3 +120,7 @@ def page_submit_row(context):
         'show_delete_translation': show_delete_translation
     }
 page_submit_row = register.inclusion_tag('admin/page_submit_line.html', takes_context=True)(page_submit_row)
+
+def in_filtered(seq1, seq2):
+    return [x for x in seq1 if x in seq2]
+in_filtered = register.filter('in_filtered', in_filtered)

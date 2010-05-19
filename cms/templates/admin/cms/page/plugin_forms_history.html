@@ -10,8 +10,12 @@
 
 {% block content %}
 <script type="text/javascript">
+//<![CDATA[	
+(function($) {
 	$(document).ready(function() {
 	   parent.setiframeheight($('body').height(), {{plugin.pk}});
 	});	
+})(jQuery);
+//]]>
 </script>
 {% endblock %}
